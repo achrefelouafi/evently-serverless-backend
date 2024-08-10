@@ -33,7 +33,7 @@ async function connectToDatabase() {
 function getCorsHeaders(origin) {
   const allowedOrigins = [
     'http://localhost:5173',
-    'https://mohamed-achref-elouafi-evently-showcase.netlify.app'
+    'https://mohamed-achref-elouafi-evently-show.netlify.app'
   ];
 
   if (allowedOrigins.includes(origin)) {
