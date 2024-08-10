@@ -1,31 +1,115 @@
-require("dotenv").config();
-const axios = require("axios");
-const process = require("process");
+const { MongoClient, ServerApiVersion } = require('mongodb');
+const dotenv = require('dotenv');
 
-exports.handler = async (event, context) => {
-  // export async function handler(event, context) {
+dotenv.config();
+
+const mongoUser = process.env.mongoUser;
+const mongoPwd = process.env.mongoPwd;
+const uri = `mongodb+srv://${mongoUser}:${mongoPwd}@evently.2iyw5.mongodb.net/?retryWrites=true&w=majority&appName=Evently`;
+
+let cachedDb = null; // Cached database connection
+
+async function connectToDatabase() {
+  if (cachedDb) {
+    return cachedDb; // Return the cached connection if already connected
+  }
+
+  const client = new MongoClient(uri, {
+    serverApi: {
+      version: ServerApiVersion.v1,
+      strict: true,
+      deprecationErrors: true,
+    },
+  });
+
+  await client.connect();
+  const db = client.db('Evently'); // Replace with your database name
+  cachedDb = db; // Cache the database connection
+  console.log('Connected to MongoDB');
+
+  return db;
+}
+
+async function handleGetExhibitions(db) {
+  const exhibitions = await db.collection('exhibitions').find({}).toArray();
+  return {
+    statusCode: 200,
+    body: JSON.stringify(exhibitions), // Return the actual exhibitions data
+  };
+}
+
+async function handlePostLogin(db, body) {
+  const { clientCode } = JSON.parse(body); // Parse the JSON body
+
+  if (!clientCode) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: 'clientCode is required' }),
+    };
+  }
+
   try {
-    const { keyword } = event.queryStringParameters;
-    let response = await axios.get(
-      `https://pixabay.com/api/?key=${process.env.PIXABAY_API_KEY}&q=${keyword}&image_type=photo&safesearch=true&per_page=3`,
-      {
-        headers: { Accept: "application/json", "Accept-Encoding": "identity" },
-        params: { trophies: true },
-      }
-    );
+    const clientData = await db.collection('users').findOne({ clientCode });
 
-    let imageURL = response.data.hits;
+    if (!clientData) {
+      return {
+        statusCode: 401,
+        body: JSON.stringify({ error: 'Invalid code' }),
+      };
+    }
 
     return {
       statusCode: 200,
-      body: JSON.stringify({ imageURL }),
+      body: JSON.stringify({ 
+        result: 'Logged in', 
+        clientName: clientData.clientName, 
+        hasReserved: clientData.hasReserved 
+      }),
     };
-  } catch (error) {
+  } catch (err) {
+    console.error('Error during login:', err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error }),
+      body: JSON.stringify({ error: 'Error during login' }),
+    };
+  }
+}
+
+async function handleGetExhibitions(db) {
+  const exhibitions = await db.collection('exhibitions').find({}).toArray();
+  return {
+    statusCode: 200,
+    body: JSON.stringify(exhibitions), // Return the actual exhibitions data
+  };
+}
+
+exports.handler = async (event) => {
+  try {
+    const db = await connectToDatabase();
+
+    // Handle GET requests
+    if (event.httpMethod === 'GET') {
+      if (event.path.endsWith('/exhibitions')) {
+        // GET /login
+        return await handleGetExhibitions(db);
+      } 
+    }
+
+    // Handle other request methods (like POST)
+    if (event.httpMethod === 'POST' && event.path.endsWith('/login')) {
+      return await handlePostLogin(db, event.body);
+    }
+
+    return {
+      statusCode: 404,
+      body: JSON.stringify({ error: 'Not Found' }),
+    };
+
+  } catch (error) {
+    console.error('Error handling request:', error);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({ error: 'An error occurred' }),
     };
   }
 };
-
-// module.exports.handler();
