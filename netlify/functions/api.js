@@ -101,6 +101,97 @@ async function handlePostLogin(db, body, origin) {
   }
 }
 
+async function handlePostBooking(db, body, origin) {
+  const { name, clientName } = JSON.parse(body); // Parse the JSON body
+
+  if (!name || !clientName) {
+    return {
+      statusCode: 400,
+      headers: getCorsHeaders(origin),
+      body: JSON.stringify({ error: 'name and clientName are required' }),
+    };
+  }
+
+  try {
+    // Check if the user has already made a reservation
+    const user = await db.collection('users').findOne({ clientName });
+
+    if (!user) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(origin),
+        body: JSON.stringify({ error: 'User not found' }),
+      };
+    }
+
+    if (user.hasReserved) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(origin),
+        body: JSON.stringify({ error: 'User has already booked a stand' }),
+      };
+    }
+
+    // Find the stand with the given name
+    const stand = await db.collection('exhibitions').findOne({ name });
+
+    if (!stand) {
+      return {
+        statusCode: 404,
+        headers: getCorsHeaders(origin),
+        body: JSON.stringify({ error: 'Stand not found' }),
+      };
+    }
+
+    // Check if the stand is already reserved
+    if (stand.isReserved) {
+      return {
+        statusCode: 400,
+        headers: getCorsHeaders(origin),
+        body: JSON.stringify({ error: 'Stand is already reserved' }),
+      };
+    }
+
+    // Set the stand's isReserved to true
+    await db.collection('exhibitions').updateOne(
+      { _id: stand._id },
+      { $set: { isReserved: true } }
+    );
+
+    // Update the user's reservation status
+    await db.collection('users').updateOne(
+      { _id: user._id },
+      { $set: { hasReserved: true } }
+    );
+
+    // Add a new entry to the reservations collection
+    await db.collection('reservations').insertOne({
+      clientName: clientName,
+      standName: stand.name,
+      standId: stand._id
+    });
+
+    return {
+      statusCode: 200,
+      headers: getCorsHeaders(origin),
+      body: JSON.stringify({ 
+        result: 'Booking successful', 
+        standName: name, 
+        clientName: clientName 
+      }),
+    };
+
+  } catch (err) {
+    console.error('Error during booking:', err);
+    return {
+      statusCode: 500,
+      headers: getCorsHeaders(origin),
+      body: JSON.stringify({ error: 'Error during booking' }),
+    };
+  }
+}
+
+
 exports.handler = async (event) => {
   try {
     const db = await connectToDatabase();
@@ -113,9 +204,15 @@ exports.handler = async (event) => {
       }
     }
 
-    // Handle POST requests
-    if (event.httpMethod === 'POST' && event.path.endsWith('/login')) {
-      return await handlePostLogin(db, event.body, origin);
+     // Handle POST requests
+     if (event.httpMethod === 'POST') {
+      if (event.path.endsWith('/login')) {
+        return await handlePostLogin(db, event.body, origin);
+      }
+
+      if (event.path.endsWith('/booking')) {
+        return await handlePostBooking(db, event.body, origin);
+      }
     }
 
     // Handle OPTIONS requests for CORS preflight
