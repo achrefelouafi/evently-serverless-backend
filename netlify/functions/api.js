@@ -102,19 +102,19 @@ async function handlePostLogin(db, body, origin) {
 }
 
 async function handlePostBooking(db, body, origin) {
-  const { name, clientName } = JSON.parse(body); // Parse the JSON body
+  const { name, clientCode } = JSON.parse(body); // Parse the JSON body
 
-  if (!name || !clientName) {
+  if (!name || !clientCode) {
     return {
       statusCode: 400,
       headers: getCorsHeaders(origin),
-      body: JSON.stringify({ error: 'name and clientName are required' }),
+      body: JSON.stringify({ error: 'name and clientCode are required' }),
     };
   }
 
   try {
-    // Check if the user has already made a reservation
-    const user = await db.collection('users').findOne({ clientName });
+    // Find the user by clientCode
+    const user = await db.collection('users').findOne({ clientCode });
 
     if (!user) {
       return {
@@ -164,9 +164,9 @@ async function handlePostBooking(db, body, origin) {
       { $set: { hasReserved: true } }
     );
 
-    // Add a new entry to the reservations collection
+    // Add a new entry to the reservations collection using clientName
     await db.collection('reservations').insertOne({
-      clientName: clientName,
+      clientName: user.clientName, // Store clientName instead of clientCode
       standName: stand.name,
       standId: stand._id
     });
@@ -177,7 +177,7 @@ async function handlePostBooking(db, body, origin) {
       body: JSON.stringify({ 
         result: 'Booking successful', 
         standName: name, 
-        clientName: clientName 
+        clientName: user.clientName // Return clientName in response
       }),
     };
 
@@ -190,7 +190,6 @@ async function handlePostBooking(db, body, origin) {
     };
   }
 }
-
 
 exports.handler = async (event) => {
   try {
