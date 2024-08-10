@@ -30,20 +30,43 @@ async function connectToDatabase() {
   return db;
 }
 
-async function handleGetExhibitions(db) {
+function getCorsHeaders(origin) {
+  const allowedOrigins = [
+    'http://localhost:5173',
+    'https://mohamed-achref-elouafi-evently-showcase.netlify.app'
+  ];
+
+  if (allowedOrigins.includes(origin)) {
+    return {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    };
+  }
+
+  return {
+    'Access-Control-Allow-Origin': 'null', // Disallow other origins
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type',
+  };
+}
+
+async function handleGetExhibitions(db, origin) {
   const exhibitions = await db.collection('exhibitions').find({}).toArray();
   return {
     statusCode: 200,
+    headers: getCorsHeaders(origin),
     body: JSON.stringify(exhibitions), // Return the actual exhibitions data
   };
 }
 
-async function handlePostLogin(db, body) {
+async function handlePostLogin(db, body, origin) {
   const { clientCode } = JSON.parse(body); // Parse the JSON body
 
   if (!clientCode) {
     return {
       statusCode: 400,
+      headers: getCorsHeaders(origin),
       body: JSON.stringify({ error: 'clientCode is required' }),
     };
   }
@@ -54,12 +77,14 @@ async function handlePostLogin(db, body) {
     if (!clientData) {
       return {
         statusCode: 401,
+        headers: getCorsHeaders(origin),
         body: JSON.stringify({ error: 'Invalid code' }),
       };
     }
 
     return {
       statusCode: 200,
+      headers: getCorsHeaders(origin),
       body: JSON.stringify({ 
         result: 'Logged in', 
         clientName: clientData.clientName, 
@@ -70,38 +95,41 @@ async function handlePostLogin(db, body) {
     console.error('Error during login:', err);
     return {
       statusCode: 500,
+      headers: getCorsHeaders(origin),
       body: JSON.stringify({ error: 'Error during login' }),
     };
   }
 }
 
-async function handleGetExhibitions(db) {
-  const exhibitions = await db.collection('exhibitions').find({}).toArray();
-  return {
-    statusCode: 200,
-    body: JSON.stringify(exhibitions), // Return the actual exhibitions data
-  };
-}
-
 exports.handler = async (event) => {
   try {
     const db = await connectToDatabase();
+    const origin = event.headers.origin || event.headers.Origin;
 
     // Handle GET requests
     if (event.httpMethod === 'GET') {
       if (event.path.endsWith('/exhibitions')) {
-        // GET /login
-        return await handleGetExhibitions(db);
-      } 
+        return await handleGetExhibitions(db, origin);
+      }
     }
 
-    // Handle other request methods (like POST)
+    // Handle POST requests
     if (event.httpMethod === 'POST' && event.path.endsWith('/login')) {
-      return await handlePostLogin(db, event.body);
+      return await handlePostLogin(db, event.body, origin);
+    }
+
+    // Handle OPTIONS requests for CORS preflight
+    if (event.httpMethod === 'OPTIONS') {
+      return {
+        statusCode: 200,
+        headers: getCorsHeaders(origin),
+        body: JSON.stringify({}),
+      };
     }
 
     return {
       statusCode: 404,
+      headers: getCorsHeaders(origin),
       body: JSON.stringify({ error: 'Not Found' }),
     };
 
@@ -109,6 +137,7 @@ exports.handler = async (event) => {
     console.error('Error handling request:', error);
     return {
       statusCode: 500,
+      headers: getCorsHeaders(null),
       body: JSON.stringify({ error: 'An error occurred' }),
     };
   }
