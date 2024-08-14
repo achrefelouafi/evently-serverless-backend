@@ -60,6 +60,15 @@ async function handleGetExhibitions(db, origin) {
   };
 }
 
+async function handleExhibitionOptions(db, origin) {
+  const exhibitionoptions = await db.collection('exhibitionoptions').find({}).toArray();
+  return {
+    statusCode: 200,
+    headers: getCorsHeaders(origin),
+    body: JSON.stringify(exhibitionoptions), // Return the actual exhibitions data
+  };
+}
+
 async function handlePostLogin(db, body, origin) {
   const { clientCode } = JSON.parse(body); // Parse the JSON body
 
@@ -200,6 +209,10 @@ exports.handler = async (event) => {
     if (event.httpMethod === 'GET') {
       if (event.path.endsWith('/exhibitions')) {
         return await handleGetExhibitions(db, origin);
+      }
+      
+      if(event.path.endsWith('/exhibitionoptions')) {
+        return await handleExhibitionOptions(db, origin)
       }
     }
 
